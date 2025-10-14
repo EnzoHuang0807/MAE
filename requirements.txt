@@ -1,6 +1,7 @@
-torch==1.10.1
-torchvision==0.11.2
-tensorboard
-einops
+einops==0.8.1
+numpy==1.24.4
+ptflops==0.7.5
 timm==0.4.12
-tqdm
+torch==2.7.1+cu118
+torchvision==0.22.1+cu118
+tqdm==4.66.5

@@ -20,7 +20,11 @@ if __name__ == '__main__':
     parser.add_argument('--total_epoch', type=int, default=100)
     parser.add_argument('--warmup_epoch', type=int, default=5)
     parser.add_argument('--pretrained_model_path', type=str, default=None)
-    parser.add_argument('--output_model_path', type=str, default='vit-t-classifier-from_scratch.pt')
+    parser.add_argument('--output_model_path', type=str, default='vit-t-classifier-from-scratch.pt')
+
+    parser.add_argument('--mask_ratio', type=float, default=0.75)
+    parser.add_argument('--mask_encoder', action='store_true')
+    parser.add_argument('--sampling', type=str, default='random', choices=['random', 'block', 'grid'])
 
     args = parser.parse_args()
 
@@ -39,11 +43,19 @@ if __name__ == '__main__':
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     if args.pretrained_model_path is not None:
-        model = torch.load(args.pretrained_model_path, map_location='cpu')
-        writer = SummaryWriter(os.path.join('logs', 'cifar10', 'pretrain-cls'))
+        model = torch.load(args.pretrained_model_path, weights_only=False)
+        if args.mask_encoder:
+            writer = SummaryWriter(os.path.join('logs', 'mask-enc', 'pretrain-cls'))
+        elif args.sampling == 'block':
+            writer = SummaryWriter(os.path.join('logs', f'block-{int(args.mask_ratio * 100)}', 'pretrain-cls'))
+        elif args.sampling == 'grid':
+            writer = SummaryWriter(os.path.join('logs', 'grid', 'pretrain-cls'))
+        else:
+            writer = SummaryWriter(os.path.join('logs', 'baseline', 'pretrain-cls'))
     else:
         model = MAE_ViT()
-        writer = SummaryWriter(os.path.join('logs', 'cifar10', 'scratch-cls'))
+        writer = SummaryWriter(os.path.join('logs', 'baseline', 'scratch-cls'))
+    
     model = ViT_Classifier(model.encoder, num_classes=10).to(device)
 
     loss_fn = torch.nn.CrossEntropyLoss()
@@ -51,7 +63,7 @@ if __name__ == '__main__':
 
     optim = torch.optim.AdamW(model.parameters(), lr=args.base_learning_rate * args.batch_size / 256, betas=(0.9, 0.999), weight_decay=args.weight_decay)
     lr_func = lambda epoch: min((epoch + 1) / (args.warmup_epoch + 1e-8), 0.5 * (math.cos(epoch / args.total_epoch * math.pi) + 1))
-    lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optim, lr_lambda=lr_func, verbose=True)
+    lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optim, lr_lambda=lr_func)
 
     best_val_acc = 0
     step_count = 0

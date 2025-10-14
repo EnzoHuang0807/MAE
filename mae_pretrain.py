@@ -6,6 +6,7 @@ import torchvision
 from torch.utils.tensorboard import SummaryWriter
 from torchvision.transforms import ToTensor, Compose, Normalize
 from tqdm import tqdm
+from ptflops import get_model_complexity_info
 
 from model import *
 from utils import setup_seed
@@ -22,6 +23,9 @@ if __name__ == '__main__':
     parser.add_argument('--warmup_epoch', type=int, default=200)
     parser.add_argument('--model_path', type=str, default='vit-t-mae.pt')
 
+    parser.add_argument('--mask_encoder', action='store_true')
+    parser.add_argument('--sampling', type=str, default='random', choices=['random', 'block', 'grid'])
+
     args = parser.parse_args()
 
     setup_seed(args.seed)
@@ -35,13 +39,21 @@ if __name__ == '__main__':
     train_dataset = torchvision.datasets.CIFAR10('data', train=True, download=True, transform=Compose([ToTensor(), Normalize(0.5, 0.5)]))
     val_dataset = torchvision.datasets.CIFAR10('data', train=False, download=True, transform=Compose([ToTensor(), Normalize(0.5, 0.5)]))
     dataloader = torch.utils.data.DataLoader(train_dataset, load_batch_size, shuffle=True, num_workers=4)
-    writer = SummaryWriter(os.path.join('logs', 'cifar10', 'mae-pretrain'))
+
+    if args.mask_encoder:
+        writer = SummaryWriter(os.path.join('logs', 'mask-enc', 'mae-pretrain'))
+    elif args.sampling == 'block':
+        writer = SummaryWriter(os.path.join('logs', f'block-{int(args.mask_ratio * 100)}', 'mae-pretrain'))
+    elif args.sampling == 'grid':
+        writer = SummaryWriter(os.path.join('logs', 'grid', 'mae-pretrain'))
+    else:
+        writer = SummaryWriter(os.path.join('logs', 'baseline', 'mae-pretrain'))
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    model = MAE_ViT(mask_ratio=args.mask_ratio).to(device)
+    model = MAE_ViT(mask_ratio=args.mask_ratio, mask_encoder=args.mask_encoder, sampling=args.sampling).to(device)
     optim = torch.optim.AdamW(model.parameters(), lr=args.base_learning_rate * args.batch_size / 256, betas=(0.9, 0.95), weight_decay=args.weight_decay)
     lr_func = lambda epoch: min((epoch + 1) / (args.warmup_epoch + 1e-8), 0.5 * (math.cos(epoch / args.total_epoch * math.pi) + 1))
-    lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optim, lr_lambda=lr_func, verbose=True)
+    lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optim, lr_lambda=lr_func)
 
     step_count = 0
     optim.zero_grad()
@@ -76,3 +88,7 @@ if __name__ == '__main__':
         
         ''' save model '''
         torch.save(model, args.model_path)
+
+        ''' calculate FLOPs '''
+        macs, params = get_model_complexity_info(model, (3, 32, 32), as_strings=False, print_per_layer_stat=False, verbose=False) 
+        print(f"Total FLOPs : {2 * macs/1e6:.2f} (M)")
