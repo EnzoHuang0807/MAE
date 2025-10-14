@@ -1,6 +1,6 @@
 ### Implementation of [*KaiMing He el.al. Masked Autoencoders Are Scalable Vision Learners*](https://arxiv.org/abs/2111.06377).
 
-* Code is referenced from [IcarusWizard/MAE](https://github.com/IcarusWizard/MAE)
+* Forked and referenced from [IcarusWizard/MAE](https://github.com/IcarusWizard/MAE)
 * The codebase implements pre-training framework in the paper on CIFAR-10 using a ViT-Tiny.
 
 ### Environment
